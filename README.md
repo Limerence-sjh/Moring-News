@@ -48,3 +48,29 @@ python -m morning_news --dry-run
 | Phase 1 | B站+GitHub+微博 | 🚧 开发中 |
 | Phase 2 | 指南针活跃市值 | ⏳ 待研究 |
 | Phase 3 | 知乎+多用户 | ⏳ 计划中 |
+
+## 项目结构
+
+```
+morning_news/
+├── __init__.py
+├── main.py              # 入口，CLI
+├── config_loader.py     # 配置加载与验证
+├── scheduler.py         # APScheduler 调度
+├── db.py                # SQLite 数据库操作
+├── models.py            # Message/PluginResult 数据模型
+├── pusher/              # 推送模块
+│   ├── serverchan.py    # Server酱(微信)
+│   ├── email.py         # SMTP邮件
+│   └── manager.py       # 推送管理(优先级+降级)
+├── plugins/             # 信息源插件
+│   ├── base.py          # 插件基类
+│   ├── bilibili_live.py # B站UP主开播
+│   ├── github_trending.py # GitHub Trending
+│   ├── weibo.py         # 微博热搜
+│   └── template.py      # 新插件模板
+config.yaml              # 用户配置
+tests/                   # 测试
+data/                    # 数据库文件(gitignored)
+logs/                    # 日志文件(gitignored)
+```
