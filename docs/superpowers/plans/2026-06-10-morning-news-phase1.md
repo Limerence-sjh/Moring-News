@@ -31,7 +31,7 @@ D:\work\Morning News/
 │   │   ├── base.py            # BasePlugin abstract class
 │   │   ├── bilibili_live.py   # B站UP主开播+标题采集
 │   │   ├── github_trending.py # GitHub Trending
-│   │   ├── weibo_hot.py       # 微博热搜
+│   │   ├── weibo.py           # 微博热搜
 │   │   ├── template.py        # Minimal template for new plugins
 ├── config.yaml                # User configuration
 ├── tests/
@@ -45,7 +45,7 @@ D:\work\Morning News/
 │   ├── test_push_manager.py
 │   ├── test_bilibili_live.py
 │   ├── test_github_trending.py
-│   ├── test_weibo_hot.py
+│   ├── test_weibo.py
 │   ├── test_scheduler.py
 ├── requirements.txt
 ├── README.md
@@ -88,6 +88,7 @@ Create `requirements.txt`:
 
 ```
 apscheduler>=3.10.0
+sqlalchemy>=1.4.0
 requests>=2.28.0
 beautifulsoup4>=4.12.0
 PyYAML>=6.0
@@ -1376,7 +1377,7 @@ class TestDiscoverPlugins:
     def test_discover_plugins_finds_existing_plugins(self):
         """Test that discover_plugins finds plugin classes in the plugins directory."""
         plugins = discover_plugins()
-        # Should at least find bilibili_live, github_trending, weibo_hot
+        # Should at least find bilibili_live, github_trending, weibo
         # (These will be created in later tasks)
         assert isinstance(plugins, dict)
 
@@ -2767,3 +2768,236 @@ Expected: All 9 tests PASS
 git add morning_news/pusher/manager.py tests/test_push_manager.py
 git commit -m "feat: add push manager with priority routing, daily limit, and fallback logic"
 ```
+
+---
+
+TASK 10: GitHub Trending Plugin
+
+Files:
+- Create: morning_news/plugins/github_trending.py
+- Create: tests/test_github_trending.py
+
+Step 1: Write the failing test
+Create tests/test_github_trending.py with these test cases:
+- test_plugin_init_with_config: verify name=schedule_type=cron, cron_expression="0 18 * * *" top_count from config
+- test_plugin_init_with_language_filter: verify language and since config
+- test_parse_trending_page_returns_daily_message: mock HTML, verify daily message generated
+- test_parse_trending_extracts_repo_info: verify repo name, description, stars_today extracted from mock HTML
+- test_top_count_limits_results: verify only top_count repos returned
+- test_api_error_returns_empty_result: mock 500 status, verify empty result
+- test_network_error_returns_empty_result: mock exception, verify empty result
+- test_daily_data_saved_to_db: verify data persisted in daily_data table
+- test_message_content_format: verify numbered list format (not inline)
+
+Use a GITHUB_TRENDING_HTML fixture constant with 3 sample articles (article.Box-row) containing repo name, description, language, stars today, total stars. The HTML should be realistic GitHub trending page structure with h2.h3 lh-condensed selectors.
+
+Mock requests.get to return this HTML. Use unittest.mock.patch on morning_news.plugins.github_trending.requests.get.
+
+All tests should use the db fixture from conftest.py.
+
+Step 2: Run test to verify it fails
+pytest tests/test_github_trending.py -v
+Expected: FAIL with "ModuleNotFoundError: No module named 'morning_news.plugins.github_trending'"
+
+Step 3: Write GithubTrendingPlugin implementation
+Create morning_news/plugins/github_trending.py:
+- Class GithubTrendingPlugin(BasePlugin)
+- name = "github_trending", schedule_type = "cron", cron_expression = "0 18 * * *"
+- Config: top_count, language, since
+- run() method:
+  1. Build URL with language and since filters
+  2. Fetch page via requests.get
+  3. Parse HTML with BeautifulSoup (select article.Box-row, entries)
+  4. Extract: name (from h2 > a href), description (from p.col-9), language (from span), stars_today (from span.float-sm-right), total_stars (from a[href$='/stargazers'])
+  5. Limit to top_count
+  6. Save to db.save_daily_data
+  7. Format numbered list message content
+  8. Return PluginResult with daily Message
+
+- _fetch_page() helper: HTTP GET with timeout=15, returns None on error
+- _parse_trending_page() helper: BeautifulSoup parsing, returns list of repo dicts
+- _format_message_content() helper: numbered list format, each repo on its own line with number, name, stars_today, language, description
+
+Constants:
+GITHUB_TRENDING_URL = "https://github.com/trending/{language}?since={since}"
+
+Step 4: Run test to verify it8 tests PASS
+pytest tests/test_github_trending.py -v
+
+Step 5: Commit
+git add morning_news/plugins/github_trending.py tests/test_github_trending.py
+git commit -m "feat: add GitHub Trending plugin with HTML scraping and daily summary"
+
+---
+
+TASK 11: 微博热搜 Plugin
+Files:
+- Create: morning_news/plugins/weibo.py
+- Create: tests/test_weibo.py
+
+Step 1: Write the failing test
+Create tests/test_weibo.py with these test cases:
+- test_plugin_init_with_config: verify name=schedule_type=cron" top_count default=5
+- test_parse_hot_search_returns_daily_message: mock JSON response, verify daily message
+- test_top_count_limits_results: verify only top_count items
+- test_hot_items_parsed_correctly: verify word, category, num fields extracted
+- test_message_content_list_format: verify numbered list format
+- test_api_error_returns_empty_result: mock 500 status
+- test_network_error_returns_empty_result: mock exception
+- test_daily_data_saved_to_db: verify data persisted
+- test_empty_hot_list_returns_no_message: mock empty realtime list
+
+Use a WEIBO_HOT_RESPONSE fixture with 7 hot search items containing word, num, category, rank fields.
+Mock requests.get to return this JSON. Use unittest.mock.patch.
+All tests should use the db fixture.
+
+Step 2: Run test to verify it fails
+pytest tests/test_weibo.py -v
+Expected: FAIL
+
+Step 3: Write WeiboPlugin implementation
+Create morning_news/plugins/weibo.py:
+- Class WeiboPlugin(BasePlugin)
+- name = "weibo", schedule_type = "cron", cron_expression = "0 18 * * *"
+- Config: top_count (default 5)
+- run() method:
+  1. Fetch JSON from WEIBO_HOT_URL
+  2. Parse realtime list for word, category, num, rank
+  3. Sort by rank, limit to top_count
+  4. Save to db.save_daily_data
+  5. Format numbered list message content
+  6. Return PluginResult with daily Message
+
+- _fetch_hot_search() helper: HTTP GET with User-Agent header, timeout=10, returns None on error
+- _parse_hot_items() helper: parse JSON realtime list
+- _format_message_content() helper: numbered list, each item on own line
+
+Constants:
+WEIBO_HOT_URL = "https://weibo.com/ajax/side/hotSearch"
+
+Step 4: Run test to verify 9 tests PASS
+pytest tests/test_weibo.py -v
+Step 5: Commit
+git add morning_news/plugins/weibo.py tests/test_weibo.py
+git commit -m "feat: add 微博热搜 plugin with AJAX API and daily summary"
+
+---
+
+TASK 12: Scheduler
+Files:
+- Create: morning_news/scheduler.py
+- Create: tests/test_scheduler.py
+Step 1: Write the failing test
+Create tests/test_scheduler.py with these test cases:
+- test_scheduler_init_with_config: verify config and db loaded
+- test_scheduler_loads_plugins_from_config: verify plugins loaded based on config.sources
+- test_run_single_plugin_with_urgent_message: mock interval plugin returning urgent message, verify message pushed
+- test_run_daily_plugins_aggregation: verify two daily plugin results can be aggregated into combined summary
+- test_daily_summary_message_format: verify combined daily summary has correct format with all sections
+- test_register_interval_job_for_instant_plugin: verify APScheduler interval job registered
+- test_register_cron_job_for_daily_plugin: verify APScheduler cron job registered
+
+Use MockIntervalPlugin and MockCronPlugin classes inheriting BasePlugin for testing.
+Mock discover_plugins to return these test plugins.
+Use unittest.mock.patch on discover_plugins.
+All tests should use config and db fixtures from conftest.py.
+The scheduler should use APScheduler BackgroundScheduler with SQLAlchemyJobStore for persistence.
+
+Step 2: Run test to verify it fails
+pytest tests/test_scheduler.py -v
+Expected: FAIL
+
+Step 3: Write MorningNewsScheduler implementation
+Create morning_news/scheduler.py:
+- Class MorningNewsScheduler
+- __init__(config, db): load config, initialize db, create APScheduler with SQLAlchemyJobStore
+- _load_plugins(): discover and instantiate only enabled plugins matching config sources
+- _init_push_manager(): create PushManager with serverchan and email configs
+- start(): register all plugin jobs (interval for instant, cron for daily), start scheduler
+- shutdown(): gracefully shutdown scheduler
+- _register_jobs(): interval plugins get periodic jobs, cron plugins get single daily summary job at daily_time
+- _run_plugin_job(plugin): run single plugin, push urgent messages immediately, return PluginResult
+- _run_daily_summary_job(cron_plugins): run all cron plugins, aggregate results, format single daily summary message, push via PushManager
+
+Step 4: Run test to verify 6 tests PASS
+pytest tests/test_scheduler.py -v
+Step 5: Commit
+git add morning_news/scheduler.py tests/test_scheduler.py
+git commit -m "feat: add MorningNewsScheduler with APScheduler, plugin orchestration, and daily summary aggregation"
+
+---
+
+TASK 13: Main Entry Point
+Files:
+- Create: morning_news/main.py
+Step 1: Write main.py CLI entry point
+Create morning_news/main.py:
+- argparse CLI with --config, --initdb, --dry-run, --verbose flags
+- setup_logging(): configure logging level based on --verbose
+- parse_args(): return Namespace with parsed arguments
+- main() function:
+  1. Load config via ConfigLoader
+  2. Initialize Database
+  3. If --initdb: create tables and exit
+  4. Create MorningNewsScheduler
+  5. If --dry-run: run all plugins once and exit
+  6. Otherwise: start scheduler, run forever, handle Ctrl+C
+
+Step 2: Test CLI entry point
+python -m morning_news --help
+Expected: prints help message with options
+
+Step 3: Test --initdb mode
+python -m morning_news --config config.yaml --initdb
+Expected: prints success message and exits
+
+Step 4: Test --dry-run mode
+python -m morning_news --config config.yaml --dry-run
+Expected: runs plugins once, prints results, exits
+
+Step 5: Commit
+git add morning_news/main.py
+git commit -m "feat: add CLI entry point with --config, --initdb, --dry-run modes"
+
+---
+
+TASK 14: Plugin Template + README Update + Final Integration Test
+Files:
+- Create: morning_news/plugins/template.py
+- Create: morning_news/__main__.py
+- Modify: README.md
+Step 1: Create plugin template
+Create morning_news/plugins/template.py:
+- TemplatePlugin class inheriting BasePlugin
+- name="template" schedule_type="interval" interval_minutes=5
+- run() method with commented-out placeholder code showing how to implement a real plugin
+- Demonstrates fetching data, checking state, creating messages, saving data, returning PluginResult
+Step 2: Create __main__.py
+Create morning_news/__main__.py:
+- Simple file: from morning_news.main import main; main()
+- Enables python -m morning_news execution
+Step 3: Update README.md
+Replace README.md with comprehensive documentation:
+- Project description and feature list with Phase status table
+- Quick start section: install dependencies, configure, initdb, start
+- Configuration explanation pointing to config.example.yaml
+- Adding new info sources section with code example
+- Project structure section
+- Development section with test commands
+- License: MIT
+Step 4: Run full test suite
+pytest tests/ -v
+Expected: All tests PASS
+Step 5: Run integration check
+python -m morning_news --help
+python -m morning_news --config config.yaml --initdb
+python -m morning_news --config config.yaml --dry-run --verbose
+Expected: help prints, initdb succeeds, dry-run attempts plugins without crash
+Step 6: Commit
+git add morning_news/plugins/template.py morning_news/__main__.py README.md
+git commit -m "feat: add plugin template, __main__.py, and complete README documentation"
+Step 7: Final commit
+git add -A
+git status  # Verify no uncommitted changes
+git log --oneline  # Review commit history
+Expected: clean working tree, 14+ commits

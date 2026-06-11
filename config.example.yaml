@@ -1,0 +1,34 @@
+# Morning News 配置文件示例
+# 复制此文件为 config.yaml 并填入你的真实配置
+
+# 推送渠道
+push:
+  serverchan:
+    sendkey: "your-sendkey-here"    # 在 https://sct.ftqq.com/ 获取
+    daily_limit: 5                  # 免费版每日推送上限
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 465
+    from: "your-email@gmail.com"
+    password: "your-app-password"
+    to: "target-email@gmail.com"
+
+# 调度配置
+scheduler:
+  instant_interval: 5    # 即时源轮询间隔(分钟)
+  daily_time: "18:00"    # 每日摘要推送时间
+
+# 信息源配置
+sources:
+  bilibili_live:
+    enabled: true
+    up_ids:
+      - "12345"           # 填入你关注的UP主UID
+  github_trending:
+    enabled: true
+    top_count: 10
+    language: ""           # 空=所有语言，可填 "python" 等
+    since: "daily"         # daily / weekly / monthly
+  weibo:
+    enabled: true
+    top_count: 5           # 取前5条热搜

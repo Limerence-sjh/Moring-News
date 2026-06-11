@@ -1,0 +1,28 @@
+push:
+  serverchan:
+    sendkey: ""
+    daily_limit: 5
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 465
+    from: ""
+    password: ""
+    to: ""
+
+scheduler:
+  instant_interval: 5
+  daily_time: "18:00"
+
+sources:
+  bilibili_live:
+    enabled: true
+    up_ids:
+      - ""
+  github_trending:
+    enabled: true
+    top_count: 10
+    language: ""
+    since: "daily"
+  weibo:
+    enabled: true
+    top_count: 5
