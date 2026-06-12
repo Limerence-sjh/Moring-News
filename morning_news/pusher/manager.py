@@ -38,6 +38,13 @@ class PushManager:
     """
 
     def __init__(self, serverchan_config: dict, email_config: dict, db):
+        """Initialize PushManager with both push channels.
+
+        Args:
+            serverchan_config: Server酱 config (sendkey, daily_limit).
+            email_config: SMTP config (host, port, from, password, to).
+            db: Database instance for logging and limit tracking.
+        """
         self.serverchan = ServerChanPusher(serverchan_config)
         self.email = EmailPusher(email_config)
         self.db = db
@@ -66,6 +73,15 @@ class PushManager:
             return self._push_daily(message)
 
     def _push_urgent(self, message: Message) -> PushResult:
+        """Push an urgent message - bypasses daily limit, tries Server酱 first.
+
+        Args:
+            message: Urgent message to push.
+
+        Returns:
+            PushResult with the channel that succeeded (or failed).
+        """
+        # Try Server酱 first (urgent messages bypass limit)
         success = self.serverchan.push(message)
         self.db.save_push_log(
             channel="serverchan",
@@ -79,6 +95,7 @@ class PushManager:
         if success:
             return PushResult(channel="serverchan", success=True, message_title=message.title)
 
+        # Fallback to email
         success = self.email.push(message)
         self.db.save_push_log(
             channel="email",
@@ -95,9 +112,19 @@ class PushManager:
         return PushResult(channel="none", success=False, message_title=message.title)
 
     def _push_daily(self, message: Message) -> PushResult:
+        """Push a daily message - respects Server酱 daily limit.
+
+        Args:
+            message: Daily message to push.
+
+        Returns:
+            PushResult with the channel that succeeded (or failed).
+        """
+        # Check Server酱 daily limit
         push_count = self.db.get_push_count_today(channel="serverchan")
 
         if push_count >= self.serverchan.daily_limit:
+            # Limit reached, go straight to email
             success = self.email.push(message)
             self.db.save_push_log(
                 channel="email",
@@ -111,6 +138,7 @@ class PushManager:
                 return PushResult(channel="email", success=True, message_title=message.title)
             return PushResult(channel="none", success=False, message_title=message.title)
 
+        # Limit not reached, try Server酱
         success = self.serverchan.push(message)
         self.db.save_push_log(
             channel="serverchan",
@@ -124,6 +152,7 @@ class PushManager:
         if success:
             return PushResult(channel="serverchan", success=True, message_title=message.title)
 
+        # Server酱 failed, fallback to email
         success = self.email.push(message)
         self.db.save_push_log(
             channel="email",
