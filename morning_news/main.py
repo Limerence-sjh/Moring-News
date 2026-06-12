@@ -1,6 +1,9 @@
-"""CLI entry point for Morning News.
+"""Morning News CLI entry point.
 
-Provides command-line interface with --config, --initdb, --dry-run, --verbose options.
+Usage:
+    python -m morning_news --config config.yaml         # Start scheduler
+    python -m morning_news --config config.yaml --initdb # Initialize database only
+    python -m morning_news --config config.yaml --dry-run # Run all plugins once
 """
 
 import argparse
@@ -17,62 +20,35 @@ logger = logging.getLogger("morning_news")
 
 
 def setup_logging(verbose: bool = False) -> None:
-    """Configure logging for the application.
-
-    Args:
-        verbose: If True, set level to DEBUG; otherwise INFO.
-    """
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)]
     )
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments.
-
-    Returns:
-        Namespace with config, initdb, dry_run, verbose attributes.
-    """
     parser = argparse.ArgumentParser(
-        prog="morning_news",
         description="Morning News - 个人信息聚合推送工具",
+        prog="morning_news"
     )
-    parser.add_argument(
-        "--config",
-        default="config.yaml",
-        help="Path to config YAML file (default: config.yaml)",
-    )
-    parser.add_argument(
-        "--initdb",
-        action="store_true",
-        help="Initialize database and exit",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run all plugins once without scheduling and exit",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG-level logging",
-    )
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("--initdb", action="store_true", help="Initialize database and exit")
+    parser.add_argument("--dry-run", action="store_true", help="Run all plugins once, then exit")
+    parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
     return parser.parse_args()
 
 
 def main() -> None:
-    """CLI entry point: parse args, load config, init db, run scheduler."""
     args = parse_args()
     setup_logging(verbose=args.verbose)
 
     try:
-        config_loader = ConfigLoader(args.config)
-        config = config_loader.load()
+        loader = ConfigLoader(args.config)
+        config = loader.load()
     except ConfigError as e:
-        logger.error("Config error: %s", e)
+        logger.error(f"Configuration error: {e}")
         sys.exit(1)
 
     db_path = config.get("database", {}).get("path", "data/morning_news.db")
@@ -80,25 +56,31 @@ def main() -> None:
     db = Database(db_path)
 
     if args.initdb:
+        logger.info(f"Initializing database at {db_path}")
         db.initialize()
-        logger.info("Database initialized at %s", db_path)
+        logger.info("Database initialized successfully")
         sys.exit(0)
 
     db.initialize()
 
-    scheduler = MorningNewsScheduler(config, db)
+    try:
+        scheduler = MorningNewsScheduler(config=config, db=db)
+    except Exception as e:
+        logger.error(f"Failed to initialize scheduler: {e}")
+        sys.exit(1)
 
     if args.dry_run:
-        logger.info("Dry-run mode: executing all plugins once")
+        logger.info("Running in dry-run mode")
         scheduler.run_all_once()
         sys.exit(0)
 
-    logger.info("Starting Morning News scheduler")
     scheduler.start()
+    logger.info("Morning News is running. Press Ctrl+C to stop.")
 
     try:
         while True:
             time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Received KeyboardInterrupt, shutting down")
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Shutting down...")
         scheduler.shutdown()
+        logger.info("Goodbye!")
