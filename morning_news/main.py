@@ -59,6 +59,7 @@ def main() -> None:
         logger.info(f"Initializing database at {db_path}")
         db.initialize()
         logger.info("Database initialized successfully")
+        db.close()
         sys.exit(0)
 
     db.initialize()
@@ -72,6 +73,7 @@ def main() -> None:
     if args.dry_run:
         logger.info("Running in dry-run mode")
         scheduler.run_all_once()
+        db.close()
         sys.exit(0)
 
     scheduler.start()
@@ -83,4 +85,5 @@ def main() -> None:
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down...")
         scheduler.shutdown()
+        db.close()
         logger.info("Goodbye!")
