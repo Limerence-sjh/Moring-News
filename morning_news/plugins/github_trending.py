@@ -4,12 +4,15 @@ Fetches daily trending repositories from GitHub Trending page
 and formats them as a daily summary message.
 """
 
+import logging
 import requests
 from bs4 import BeautifulSoup
 from datetime import date
 from typing import Dict, List, Optional
 from morning_news.plugins.base import BasePlugin
 from morning_news.models import Message, PluginResult
+
+logger = logging.getLogger(__name__)
 
 
 class GithubTrendingPlugin(BasePlugin):
@@ -68,7 +71,10 @@ class GithubTrendingPlugin(BasePlugin):
             if response.status_code != 200:
                 return None
             return response.text
-        except Exception:
+        except requests.RequestException:
+            return None
+        except Exception as e:
+            logger.exception(f"Unexpected error in {self.name}: {e}")
             return None
 
     def _parse_repos(self, html: str) -> List[Dict]:

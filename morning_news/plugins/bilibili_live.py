@@ -5,10 +5,13 @@ Monitors B站UP主直播状态 every 5 minutes:
 - Every check: save current title to database for daily summary
 """
 
+import logging
 import requests
 from typing import Dict, Optional
 from morning_news.plugins.base import BasePlugin
 from morning_news.models import Message, PluginResult
+
+logger = logging.getLogger(__name__)
 
 
 BILIBILI_LIVE_API = "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids"
@@ -111,5 +114,8 @@ class BilibiliLivePlugin(BasePlugin):
                 return None
 
             return result.get("data", {})
-        except Exception:
+        except requests.RequestException:
+            return None
+        except Exception as e:
+            logger.exception(f"Unexpected error in {self.name}: {e}")
             return None

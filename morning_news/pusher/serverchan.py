@@ -4,8 +4,11 @@ Uses the Server酱 (SCTAPI) HTTP API to push messages to WeChat via official acc
 Docs: https://sct.ftqq.com/
 """
 
+import logging
 import requests
 from morning_news.models import Message
+
+logger = logging.getLogger(__name__)
 
 
 SERVERCHAN_API_URL = "https://sctapi.ftqq.com/{sendkey}.send"
@@ -57,5 +60,8 @@ class ServerChanPusher:
             result = response.json()
             return result.get("code") == 0
 
-        except Exception:
+        except requests.RequestException:
+            return False
+        except Exception as e:
+            logger.exception(f"Unexpected error in serverchan push: {e}")
             return False

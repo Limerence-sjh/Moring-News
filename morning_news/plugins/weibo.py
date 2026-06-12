@@ -4,11 +4,14 @@ Fetches Weibo hot search list from the Weibo API
 and formats them as a daily summary message.
 """
 
+import logging
 import requests
 from datetime import date
 from typing import Dict, List, Optional
 from morning_news.plugins.base import BasePlugin
 from morning_news.models import Message, PluginResult
+
+logger = logging.getLogger(__name__)
 
 
 WEIBO_HOT_SEARCH_API = "https://weibo.com/ajax/side/hotSearch"
@@ -66,7 +69,10 @@ class WeiboPlugin(BasePlugin):
             if response.status_code != 200:
                 return None
             return response.json()
-        except Exception:
+        except requests.RequestException:
+            return None
+        except Exception as e:
+            logger.exception(f"Unexpected error in {self.name}: {e}")
             return None
 
     def _parse_items(self, data: Dict) -> List[Dict]:
